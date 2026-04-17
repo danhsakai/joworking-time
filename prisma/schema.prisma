@@ -1,0 +1,73 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Employee {
+  id           String           @id @default(uuid()) @db.Uuid
+  fullName     String           @map("full_name") @db.VarChar(120)
+  employeeCode String           @unique @map("employee_code") @db.VarChar(4)
+  passwordHash String           @map("password_hash")
+  avatarPath   String?          @map("avatar_path")
+  hourlyRate   Int              @default(32500) @map("hourly_rate")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+  auditLogs    AuditLog[]
+  summaries    PayrollSummary[]
+  shifts       Shift[]
+
+  @@map("employees")
+}
+
+model Shift {
+  id              String   @id @default(uuid()) @db.Uuid
+  employeeId      String   @map("employee_id") @db.Uuid
+  workDate        DateTime @map("work_date") @db.Date
+  shiftIndex      Int      @default(1) @map("shift_index")
+  timeInMinutes   Int      @map("time_in_minutes")
+  timeOutMinutes  Int      @map("time_out_minutes")
+  breakInMinutes  Int      @map("break_in_minutes")
+  breakOutMinutes Int      @map("break_out_minutes")
+  breakMinutes    Int      @map("break_minutes")
+  workMinutes     Int      @map("work_minutes")
+  salaryAmount    Int      @map("salary_amount")
+  evidencePath    String?  @map("evidence_path")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, workDate, shiftIndex])
+  @@index([employeeId, workDate, shiftIndex])
+  @@map("shifts")
+}
+
+model PayrollSummary {
+  id               String   @id @default(uuid()) @db.Uuid
+  employeeId       String   @map("employee_id") @db.Uuid
+  periodFrom       DateTime @map("period_from") @db.Date
+  periodTo         DateTime @map("period_to") @db.Date
+  totalWorkMinutes Int      @map("total_work_minutes")
+  totalSalary      Int      @map("total_salary")
+  generatedAt      DateTime @default(now()) @map("generated_at")
+  employee         Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, periodFrom, periodTo])
+  @@map("payroll_summaries")
+}
+
+model AuditLog {
+  id         String    @id @default(uuid()) @db.Uuid
+  employeeId String?   @map("employee_id") @db.Uuid
+  actionType String    @map("action_type") @db.VarChar(64)
+  payload    Json      @map("payload_json")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  employee   Employee? @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, actionType])
+  @@map("audit_logs")
+}
