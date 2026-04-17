@@ -470,6 +470,7 @@ export default function Home() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [deletingShiftId, setDeletingShiftId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [useNativePickers, setUseNativePickers] = useState(false);
   const [toast, setToast] = useState<{ message: string; tone: "success" | "error" | "warn" } | null>(
     null,
   );
@@ -681,6 +682,24 @@ export default function Home() {
     const timer = window.setTimeout(() => setToast(null), 2600);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 768px), (pointer: coarse)");
+
+    const updatePickerMode = () => {
+      setUseNativePickers(mediaQuery.matches);
+    };
+
+    updatePickerMode();
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", updatePickerMode);
+      return () => mediaQuery.removeEventListener("change", updatePickerMode);
+    }
+
+    mediaQuery.addListener(updatePickerMode);
+    return () => mediaQuery.removeListener(updatePickerMode);
+  }, []);
 
   useEffect(() => {
     if (!previewImageUrl) return;
@@ -1282,7 +1301,19 @@ export default function Home() {
           <h2 className="font-mono text-xl font-semibold">Nhập giờ công mỗi ngày</h2>
           <form className="mt-4 grid gap-4" onSubmit={handleSaveShift}>
             <div className="grid gap-3 sm:grid-cols-2">
-              <DatePickerField label="Ngày" onChange={setWorkDate} value={workDate} />
+              {useNativePickers ? (
+                <label className="text-sm">
+                  Ngày
+                  <input
+                    className={inputClass}
+                    onChange={(event) => setWorkDate(event.target.value)}
+                    type="date"
+                    value={workDate}
+                  />
+                </label>
+              ) : (
+                <DatePickerField label="Ngày" onChange={setWorkDate} value={workDate} />
+              )}
               <label className="text-sm">
                 Ca làm
                 <select
@@ -1300,18 +1331,66 @@ export default function Home() {
               <div className="soft-card rounded-xl p-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">Khung giờ làm</p>
                 <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-                  <TimePickerField label="Giờ vào" onChange={setTimeIn} value={timeIn} />
+                  {useNativePickers ? (
+                    <label className="text-sm">
+                      Giờ vào
+                      <input
+                        className={inputClass}
+                        onChange={(event) => setTimeIn(event.target.value)}
+                        type="time"
+                        value={timeIn}
+                      />
+                    </label>
+                  ) : (
+                    <TimePickerField label="Giờ vào" onChange={setTimeIn} value={timeIn} />
+                  )}
                   <span className="pb-2 text-[color:var(--muted)]">→</span>
-                  <TimePickerField label="Giờ ra" onChange={setTimeOut} value={timeOut} />
+                  {useNativePickers ? (
+                    <label className="text-sm">
+                      Giờ ra
+                      <input
+                        className={inputClass}
+                        onChange={(event) => setTimeOut(event.target.value)}
+                        type="time"
+                        value={timeOut}
+                      />
+                    </label>
+                  ) : (
+                    <TimePickerField label="Giờ ra" onChange={setTimeOut} value={timeOut} />
+                  )}
                 </div>
               </div>
 
               <div className="soft-card rounded-xl p-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">Khoảng nghỉ</p>
                 <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-                  <TimePickerField label="Bắt đầu" onChange={setBreakIn} value={breakIn} />
+                  {useNativePickers ? (
+                    <label className="text-sm">
+                      Bắt đầu
+                      <input
+                        className={inputClass}
+                        onChange={(event) => setBreakIn(event.target.value)}
+                        type="time"
+                        value={breakIn}
+                      />
+                    </label>
+                  ) : (
+                    <TimePickerField label="Bắt đầu" onChange={setBreakIn} value={breakIn} />
+                  )}
                   <span className="pb-2 text-[color:var(--muted)]">→</span>
-                  <TimePickerField label="Kết thúc" onChange={setBreakOut} value={breakOut} />
+                  {useNativePickers ? (
+                    <label className="text-sm">
+                      Kết thúc
+                      <input
+                        className={inputClass}
+                        onChange={(event) => setBreakOut(event.target.value)}
+                        type="time"
+                        value={breakOut}
+                      />
+                    </label>
+                  ) : (
+                    <TimePickerField label="Kết thúc" onChange={setBreakOut} value={breakOut} />
+                  )}
                 </div>
               </div>
             </div>
@@ -1375,8 +1454,33 @@ export default function Home() {
               </button>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <DatePickerField label="Từ ngày" onChange={setRangeFrom} value={rangeFrom} />
-              <DatePickerField label="Đến ngày" onChange={setRangeTo} value={rangeTo} />
+              {useNativePickers ? (
+                <label className="text-sm">
+                  Từ ngày
+                  <input
+                    className={inputClass}
+                    onChange={(event) => setRangeFrom(event.target.value)}
+                    type="date"
+                    value={rangeFrom}
+                  />
+                </label>
+              ) : (
+                <DatePickerField label="Từ ngày" onChange={setRangeFrom} value={rangeFrom} />
+              )}
+
+              {useNativePickers ? (
+                <label className="text-sm">
+                  Đến ngày
+                  <input
+                    className={inputClass}
+                    onChange={(event) => setRangeTo(event.target.value)}
+                    type="date"
+                    value={rangeTo}
+                  />
+                </label>
+              ) : (
+                <DatePickerField label="Đến ngày" onChange={setRangeTo} value={rangeTo} />
+              )}
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
