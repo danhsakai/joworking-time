@@ -61,6 +61,11 @@ export async function GET(request: Request) {
       },
     },
     orderBy: { workDate: "asc" },
+    select: {
+      workDate: true,
+      workMinutes: true,
+      salaryAmount: true,
+    },
   });
 
   const previousShifts = await prisma.shift.findMany({
@@ -70,6 +75,10 @@ export async function GET(request: Request) {
         gte: prevFrom,
         lte: prevTo,
       },
+    },
+    select: {
+      workMinutes: true,
+      salaryAmount: true,
     },
   });
 

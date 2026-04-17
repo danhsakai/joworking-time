@@ -471,6 +471,9 @@ export default function Home() {
   const [deletingShiftId, setDeletingShiftId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [useNativePickers, setUseNativePickers] = useState(false);
+  const [authResolved, setAuthResolved] = useState(false);
+  const [initialShiftsLoaded, setInitialShiftsLoaded] = useState(false);
+  const [initialSummaryLoaded, setInitialSummaryLoaded] = useState(false);
   const [toast, setToast] = useState<{ message: string; tone: "success" | "error" | "warn" } | null>(
     null,
   );
@@ -623,10 +626,11 @@ export default function Home() {
   useEffect(() => {
     const init = async () => {
       const res = await fetch("/api/auth/me", { cache: "no-store" });
-      if (!res.ok) return;
-
-      const data = (await res.json()) as { employee: Employee };
-      setEmployee(data.employee);
+      if (res.ok) {
+        const data = (await res.json()) as { employee: Employee };
+        setEmployee(data.employee);
+      }
+      setAuthResolved(true);
     };
 
     void init();
@@ -635,26 +639,39 @@ export default function Home() {
   useEffect(() => {
     if (!employee) return;
 
+    let cancelled = false;
+
     const loadShifts = async () => {
       setShiftsLoading(true);
       try {
         const res = await fetch("/api/shifts", { cache: "no-store" });
         if (res.ok) {
           const data = (await res.json()) as { shifts: Shift[] };
-          setShifts(data.shifts);
+          if (!cancelled) {
+            setShifts(data.shifts);
+          }
         }
       } finally {
-        setShiftsLoading(false);
+        if (!cancelled) {
+          setShiftsLoading(false);
+          setInitialShiftsLoaded(true);
+        }
       }
     };
 
     void loadShifts();
+
+    return () => {
+      cancelled = true;
+    };
   }, [employee]);
 
   useEffect(() => {
     if (!isRangeValid) {
       return;
     }
+
+    let cancelled = false;
 
     const loadSummary = async () => {
       setSummaryLoading(true);
@@ -664,17 +681,28 @@ export default function Home() {
           cache: "no-store",
         });
         if (!res.ok) {
-          setSummary(null);
+          if (!cancelled) {
+            setSummary(null);
+          }
           return;
         }
         const data = (await res.json()) as RangeSummary;
-        setSummary(data);
+        if (!cancelled) {
+          setSummary(data);
+        }
       } finally {
-        setSummaryLoading(false);
+        if (!cancelled) {
+          setSummaryLoading(false);
+          setInitialSummaryLoaded(true);
+        }
       }
     };
 
     void loadSummary();
+
+    return () => {
+      cancelled = true;
+    };
   }, [isRangeValid, rangeFrom, rangeTo]);
 
   useEffect(() => {
@@ -781,6 +809,8 @@ export default function Home() {
     setEmployee(null);
     setShifts([]);
     setSummary(null);
+    setInitialShiftsLoaded(false);
+    setInitialSummaryLoaded(false);
     setAvatarMessage("");
     setToast({ message: "Đã đăng xuất", tone: "warn" });
   };
@@ -885,9 +915,12 @@ export default function Home() {
         return;
       }
 
-      const listRes = await fetch("/api/shifts", { cache: "no-store" });
-      const listData = (await listRes.json()) as { shifts: Shift[] };
-      setShifts(listData.shifts);
+      const savedShift = saveData.shift as Shift;
+      setShifts((prev) => {
+        const next = prev.filter((item) => item.id !== savedShift.id);
+        next.unshift(savedShift);
+        return next.slice(0, 120);
+      });
 
       setEvidenceFile(null);
       setEntryMessage("Lưu giờ công thành công");
@@ -1026,6 +1059,25 @@ export default function Home() {
 
     setToast({ message: "Xuất CSV thành công", tone: "success" });
   };
+
+  const isPageReady =
+    authResolved && (!employee || (initialShiftsLoaded && initialSummaryLoaded));
+
+  if (!isPageReady) {
+    return (
+      <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#d6e8ff_0%,transparent_43%),radial-gradient(circle_at_bottom_right,#d9f2ff_0%,transparent_36%),linear-gradient(180deg,#f8fbff_0%,var(--background)_40%)] transition-colors duration-300 dark:bg-[radial-gradient(circle_at_top_left,#14365f_0%,transparent_42%),radial-gradient(circle_at_bottom_right,#12304f_0%,transparent_35%),linear-gradient(180deg,#0f1d32_0%,var(--background)_40%)]">
+        <main className="mx-auto flex min-h-screen w-full max-w-6xl items-center justify-center px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <div className="card flex w-full max-w-md flex-col items-center rounded-2xl px-6 py-8 text-center">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-[color:var(--line)] border-t-[color:var(--accent)]" />
+            <p className="mt-4 font-mono text-lg font-semibold">Đang tải JoWorking Time</p>
+            <p className="mt-1 text-sm text-[color:var(--muted)]">
+              Đang xác thực tài khoản và đồng bộ dữ liệu...
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#d6e8ff_0%,transparent_43%),radial-gradient(circle_at_bottom_right,#d9f2ff_0%,transparent_36%),linear-gradient(180deg,#f8fbff_0%,var(--background)_40%)] transition-colors duration-300 dark:bg-[radial-gradient(circle_at_top_left,#14365f_0%,transparent_42%),radial-gradient(circle_at_bottom_right,#12304f_0%,transparent_35%),linear-gradient(180deg,#0f1d32_0%,var(--background)_40%)]">
@@ -1759,10 +1811,10 @@ export default function Home() {
                   </button>
                 </>
               ) : null}
-              <div className="mt-8 overflow-hidden rounded-xl bg-[color:var(--surface-soft)]">
+              <div className="mt-8 flex h-[68vh] min-h-[360px] w-full items-center justify-center overflow-hidden rounded-xl bg-[color:var(--surface-soft)]">
                 <Image
                   alt={previewImageAlt}
-                  className="h-auto max-h-[78vh] w-full object-contain"
+                  className="h-full w-full object-contain"
                   height={900}
                   src={previewImageUrl}
                   width={1200}

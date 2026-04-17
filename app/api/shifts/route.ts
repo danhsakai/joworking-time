@@ -23,6 +23,19 @@ export async function GET() {
     },
     orderBy: [{ workDate: "desc" }, { shiftIndex: "asc" }],
     take: 120,
+    select: {
+      id: true,
+      workDate: true,
+      shiftIndex: true,
+      timeInMinutes: true,
+      timeOutMinutes: true,
+      breakInMinutes: true,
+      breakOutMinutes: true,
+      breakMinutes: true,
+      workMinutes: true,
+      salaryAmount: true,
+      evidencePath: true,
+    },
   });
 
   return NextResponse.json({ shifts });
@@ -102,7 +115,21 @@ export async function POST(request: Request) {
     },
   });
 
-  return NextResponse.json({ shift });
+  return NextResponse.json({
+    shift: {
+      id: shift.id,
+      workDate: shift.workDate,
+      shiftIndex: shift.shiftIndex,
+      timeInMinutes: shift.timeInMinutes,
+      timeOutMinutes: shift.timeOutMinutes,
+      breakInMinutes: shift.breakInMinutes,
+      breakOutMinutes: shift.breakOutMinutes,
+      breakMinutes: shift.breakMinutes,
+      workMinutes: shift.workMinutes,
+      salaryAmount: shift.salaryAmount,
+      evidencePath: shift.evidencePath,
+    },
+  });
 }
 
 export async function DELETE(request: Request) {
