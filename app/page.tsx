@@ -1,7 +1,31 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
+import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+
+import EmployeeCard from "@/app/components/employee-card";
+import { AppBackground, AppHeader, FullPageLoader } from "@/app/components/page-shell";
+import SummaryPanel from "@/app/components/summary-panel";
+import TimesheetForm from "@/app/components/timesheet-form";
+
+const LazyEvidenceModal = dynamic(() => import("@/app/components/evidence-modal"), {
+  ssr: false,
+});
+
+const LazyShiftsTable = dynamic(() => import("@/app/components/shifts-table"), {
+  ssr: false,
+  loading: () => (
+    <section className="card rounded-2xl p-5 sm:p-6">
+      <div className="h-6 w-40 animate-pulse rounded-lg bg-[color:var(--surface-soft)]" />
+      <div className="mt-4 space-y-2">
+        <div className="h-10 animate-pulse rounded-xl bg-[color:var(--surface-soft)]" />
+        <div className="h-10 animate-pulse rounded-xl bg-[color:var(--surface-soft)]" />
+        <div className="h-10 animate-pulse rounded-xl bg-[color:var(--surface-soft)]" />
+      </div>
+    </section>
+  ),
+});
 
 const DEFAULT_RATE = 32500;
 
@@ -45,20 +69,20 @@ function toMinutes(value: string) {
   return h * 60 + m;
 }
 
-function toHHMM(minutes: number) {
-  const h = Math.floor(minutes / 60)
-    .toString()
-    .padStart(2, "0");
-  const m = (minutes % 60).toString().padStart(2, "0");
-  return `${h}:${m}`;
-}
-
 function hoursLabel(minutes: number) {
   return (minutes / 60).toFixed(2);
 }
 
 function moneyLabel(value: number) {
   return `${new Intl.NumberFormat("vi-VN").format(value)} VND`;
+}
+
+function toHHMM(minutes: number) {
+  const h = Math.floor(minutes / 60)
+    .toString()
+    .padStart(2, "0");
+  const m = (minutes % 60).toString().padStart(2, "0");
+  return `${h}:${m}`;
 }
 
 function toDateInput(date: Date) {
@@ -122,302 +146,6 @@ function getEvidenceUrl(evidencePath: string | null | undefined) {
   return getStoragePublicUrl("timesheet-evidence", evidencePath);
 }
 
-function parseHHMM(value: string) {
-  const [h, m] = value.split(":").map(Number);
-  return {
-    hour: Number.isFinite(h) ? h : 0,
-    minute: Number.isFinite(m) ? m : 0,
-  };
-}
-
-function pad2(value: number) {
-  return String(value).padStart(2, "0");
-}
-
-function parseDateInput(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return null;
-  return new Date(year, month - 1, day);
-}
-
-function monthLabel(date: Date) {
-  return `Tháng ${date.getMonth() + 1}/${date.getFullYear()}`;
-}
-
-function calendarDays(viewMonth: Date) {
-  const firstDayOfMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
-  const startOffset = (firstDayOfMonth.getDay() + 6) % 7;
-  const startDate = new Date(firstDayOfMonth);
-  startDate.setDate(firstDayOfMonth.getDate() - startOffset);
-
-  return Array.from({ length: 42 }, (_, idx) => {
-    const day = new Date(startDate);
-    day.setDate(startDate.getDate() + idx);
-    return day;
-  });
-}
-
-function TimePickerField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (next: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const { hour, minute } = parseHHMM(value);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const onOutsideClick = (event: MouseEvent) => {
-      if (!wrapperRef.current) return;
-      if (!wrapperRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    };
-
-    window.addEventListener("mousedown", onOutsideClick);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("mousedown", onOutsideClick);
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
-  return (
-    <div className="relative" ref={wrapperRef}>
-      <label className="text-sm">{label}</label>
-      <button
-        className="mt-1 flex w-full items-center justify-between rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2 text-sm shadow-sm transition hover:bg-[color:var(--surface-soft)]"
-        onClick={() => setOpen((prev) => !prev)}
-        type="button"
-      >
-        <span className="font-medium">{value}</span>
-        <span className="text-[color:var(--muted)]">🕒</span>
-      </button>
-
-      {open ? (
-        <div className="absolute left-0 z-30 mt-2 w-[272px] max-w-[calc(100vw-3rem)] rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-3 shadow-xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
-            Chọn giờ
-          </p>
-          <div className="mt-2 grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-xs text-[color:var(--muted)]">Giờ</p>
-              <div className="mt-1 max-h-40 overflow-y-auto rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] p-1">
-                {Array.from({ length: 24 }, (_, idx) => idx).map((item) => {
-                  const selected = item === hour;
-                  return (
-                    <button
-                      className={`mb-1 w-full rounded-lg px-2 py-1.5 text-left text-sm last:mb-0 ${
-                        selected
-                          ? "bg-[color:var(--accent)] text-white"
-                          : "hover:bg-[color:var(--surface)]"
-                      }`}
-                      key={`hour-${item}`}
-                      onClick={() => onChange(`${pad2(item)}:${pad2(minute)}`)}
-                      type="button"
-                    >
-                      {pad2(item)}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div>
-              <p className="text-xs text-[color:var(--muted)]">Phút</p>
-              <div className="mt-1 max-h-40 overflow-y-auto rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] p-1">
-                {Array.from({ length: 60 }, (_, idx) => idx).map((item) => {
-                  const selected = item === minute;
-                  return (
-                    <button
-                      className={`mb-1 w-full rounded-lg px-2 py-1.5 text-left text-sm last:mb-0 ${
-                        selected
-                          ? "bg-[color:var(--accent)] text-white"
-                          : "hover:bg-[color:var(--surface)]"
-                      }`}
-                      key={`minute-${item}`}
-                      onClick={() => onChange(`${pad2(hour)}:${pad2(item)}`)}
-                      type="button"
-                    >
-                      {pad2(item)}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-2 flex justify-end">
-            <button
-              className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-3 py-1.5 text-xs"
-              onClick={() => setOpen(false)}
-              type="button"
-            >
-              Xong
-            </button>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function DatePickerField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (next: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const selectedDate = parseDateInput(value) ?? new Date();
-  const [viewMonth, setViewMonth] = useState(
-    new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1),
-  );
-
-  useEffect(() => {
-    if (!open) return;
-
-    const onOutsideClick = (event: MouseEvent) => {
-      if (!wrapperRef.current) return;
-      if (!wrapperRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    };
-
-    window.addEventListener("mousedown", onOutsideClick);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("mousedown", onOutsideClick);
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
-  const days = calendarDays(viewMonth);
-
-  return (
-    <div className="relative" ref={wrapperRef}>
-      <label className="text-sm">{label}</label>
-      <button
-        className="mt-1 flex w-full items-center justify-between rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2 text-sm shadow-sm transition hover:bg-[color:var(--surface-soft)]"
-        onClick={() => {
-          const parsed = parseDateInput(value);
-          if (parsed) {
-            setViewMonth(new Date(parsed.getFullYear(), parsed.getMonth(), 1));
-          }
-          setOpen((prev) => !prev);
-        }}
-        type="button"
-      >
-        <span className="font-medium">{value}</span>
-        <span className="text-[color:var(--muted)]">📅</span>
-      </button>
-
-      {open ? (
-        <div className="absolute left-0 z-30 mt-2 w-[300px] max-w-[calc(100vw-3rem)] rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-3 shadow-xl">
-          <div className="mb-2 flex items-center justify-between">
-            <button
-              className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-2 py-1 text-xs"
-              onClick={() =>
-                setViewMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
-              }
-              type="button"
-            >
-              ←
-            </button>
-            <p className="text-sm font-semibold">{monthLabel(viewMonth)}</p>
-            <button
-              className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-2 py-1 text-xs"
-              onClick={() =>
-                setViewMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
-              }
-              type="button"
-            >
-              →
-            </button>
-          </div>
-
-          <div className="grid grid-cols-7 gap-1 text-center text-xs text-[color:var(--muted)]">
-            <span>T2</span>
-            <span>T3</span>
-            <span>T4</span>
-            <span>T5</span>
-            <span>T6</span>
-            <span>T7</span>
-            <span>CN</span>
-          </div>
-
-          <div className="mt-1 grid grid-cols-7 gap-1">
-            {days.map((day) => {
-              const inMonth = day.getMonth() === viewMonth.getMonth();
-              const isSelected = toDateInput(day) === value;
-              return (
-                <button
-                  className={`rounded-lg px-1 py-1.5 text-sm ${
-                    isSelected
-                      ? "bg-[color:var(--accent)] text-white"
-                      : inMonth
-                        ? "hover:bg-[color:var(--surface-soft)]"
-                        : "text-[color:var(--muted)]/60 hover:bg-[color:var(--surface-soft)]"
-                  }`}
-                  key={`${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`}
-                  onClick={() => {
-                    onChange(toDateInput(day));
-                    setOpen(false);
-                  }}
-                  type="button"
-                >
-                  {day.getDate()}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-2 flex justify-between">
-            <button
-              className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-3 py-1.5 text-xs"
-              onClick={() => {
-                onChange(toDateInput(new Date()));
-                setOpen(false);
-              }}
-              type="button"
-            >
-              Hôm nay
-            </button>
-            <button
-              className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-3 py-1.5 text-xs"
-              onClick={() => setOpen(false)}
-              type="button"
-            >
-              Xong
-            </button>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 const inputClass =
   "mt-1 w-full rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2 text-sm shadow-sm transition focus:border-[color:var(--accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/20";
@@ -428,24 +156,39 @@ const primaryButtonClass =
 const secondaryButtonClass =
   "rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm text-[color:var(--foreground)] shadow-sm transition hover:-translate-y-0.5 hover:bg-[color:var(--surface-soft)]";
 
-const PAGE_SIZE = 10;
+const LazyDashboardComparison = dynamic(
+  () => import("@/app/components/dashboard-comparison"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="card rounded-2xl p-5 sm:p-6">
+        <div className="h-6 w-44 animate-pulse rounded-lg bg-[color:var(--surface-soft)]" />
+        <div className="mt-3 h-4 w-64 animate-pulse rounded-lg bg-[color:var(--surface-soft)]" />
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <div className="h-12 animate-pulse rounded-xl bg-[color:var(--surface-soft)]" />
+            <div className="h-12 animate-pulse rounded-xl bg-[color:var(--surface-soft)]" />
+          </div>
+          <div className="space-y-2">
+            <div className="h-12 animate-pulse rounded-xl bg-[color:var(--surface-soft)]" />
+            <div className="h-12 animate-pulse rounded-xl bg-[color:var(--surface-soft)]" />
+          </div>
+        </div>
+      </div>
+    ),
+  },
+);
 
 export default function Home() {
+  const router = useRouter();
   const today = toDateInput(new Date());
-  const timesheetSectionRef = useRef<HTMLElement | null>(null);
+  const timesheetSectionRef = useRef<HTMLDivElement | null>(null);
   const summarySectionRef = useRef<HTMLElement | null>(null);
 
   const [theme, setTheme] = useState<"light" | "dark">("light");
-  const [activeAuthMode, setActiveAuthMode] = useState<"login" | "register">("login");
   const [employee, setEmployee] = useState<Employee | null>(null);
-  const [authMessage, setAuthMessage] = useState("");
-  const [authLoading, setAuthLoading] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarMessage, setAvatarMessage] = useState("");
-
-  const [fullName, setFullName] = useState("");
-  const [employeeCode, setEmployeeCode] = useState("");
-  const [password, setPassword] = useState("");
 
   const [workDate, setWorkDate] = useState(today);
   const [shiftIndex, setShiftIndex] = useState<1 | 2>(1);
@@ -461,7 +204,6 @@ export default function Home() {
   const [rangeFrom, setRangeFrom] = useState(today);
   const [rangeTo, setRangeTo] = useState(today);
   const [summary, setSummary] = useState<RangeSummary | null>(null);
-  const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [previewImageAlt, setPreviewImageAlt] = useState<string>("");
   const [previewImageItems, setPreviewImageItems] = useState<Array<{ url: string; alt: string }>>([]);
@@ -572,14 +314,6 @@ export default function Home() {
     return true;
   }, [frontendMonthlyMap, summary]);
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(shifts.length / PAGE_SIZE)), [shifts.length]);
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-
-  const paginatedShifts = useMemo(() => {
-    const start = (safeCurrentPage - 1) * PAGE_SIZE;
-    return shifts.slice(start, start + PAGE_SIZE);
-  }, [safeCurrentPage, shifts]);
-
   const reminders = useMemo(() => {
     if (!employee) return [] as ReminderItem[];
 
@@ -635,6 +369,13 @@ export default function Home() {
 
     void init();
   }, []);
+
+  useEffect(() => {
+    if (!authResolved) return;
+    if (!employee) {
+      router.replace("/auth");
+    }
+  }, [authResolved, employee, router]);
 
   useEffect(() => {
     if (!employee) return;
@@ -755,55 +496,6 @@ export default function Home() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [previewImageUrl, previewImageIndex, previewImageItems]);
 
-  const handleAuth = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setAuthLoading(true);
-    setAuthMessage("");
-
-    try {
-      const body =
-        activeAuthMode === "register"
-          ? { fullName, employeeCode, password }
-          : { employeeCode, password };
-
-      const endpoint =
-        activeAuthMode === "register" ? "/api/auth/register" : "/api/auth/login";
-
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setAuthMessage(data.message ?? "Xác thực thất bại");
-        setToast({ message: data.message ?? "Xác thực thất bại", tone: "error" });
-        return;
-      }
-
-      setEmployee(data.employee as Employee);
-      setAuthMessage(
-        activeAuthMode === "register"
-          ? "Tạo tài khoản và đăng nhập thành công"
-          : "Đăng nhập thành công",
-      );
-      setToast({
-        message:
-          activeAuthMode === "register"
-            ? "Tạo tài khoản và đăng nhập thành công"
-            : "Đăng nhập thành công",
-        tone: "success",
-      });
-    } catch {
-      setAuthMessage("Không thể kết nối tới máy chủ");
-      setToast({ message: "Không thể kết nối tới máy chủ", tone: "error" });
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     setEmployee(null);
@@ -813,6 +505,7 @@ export default function Home() {
     setInitialSummaryLoaded(false);
     setAvatarMessage("");
     setToast({ message: "Đã đăng xuất", tone: "warn" });
+    router.replace("/auth");
   };
 
   const handleAvatarUpload = async (file: File) => {
@@ -853,9 +546,6 @@ export default function Home() {
       setToast({ message: "Không thể kết nối tới máy chủ", tone: "error" });
     } finally {
       setAvatarUploading(false);
-      if (avatarInputRef.current) {
-        avatarInputRef.current.value = "";
-      }
     }
   };
 
@@ -1065,267 +755,41 @@ export default function Home() {
 
   if (!isPageReady) {
     return (
-      <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#d6e8ff_0%,transparent_43%),radial-gradient(circle_at_bottom_right,#d9f2ff_0%,transparent_36%),linear-gradient(180deg,#f8fbff_0%,var(--background)_40%)] transition-colors duration-300 dark:bg-[radial-gradient(circle_at_top_left,#14365f_0%,transparent_42%),radial-gradient(circle_at_bottom_right,#12304f_0%,transparent_35%),linear-gradient(180deg,#0f1d32_0%,var(--background)_40%)]">
-        <main className="mx-auto flex min-h-screen w-full max-w-6xl items-center justify-center px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          <div className="card flex w-full max-w-md flex-col items-center rounded-2xl px-6 py-8 text-center">
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-[color:var(--line)] border-t-[color:var(--accent)]" />
-            <p className="mt-4 font-mono text-lg font-semibold">Đang tải JoWorking Time</p>
-            <p className="mt-1 text-sm text-[color:var(--muted)]">
-              Đang xác thực tài khoản và đồng bộ dữ liệu...
-            </p>
-          </div>
-        </main>
-      </div>
+      <AppBackground>
+        <FullPageLoader />
+      </AppBackground>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#d6e8ff_0%,transparent_43%),radial-gradient(circle_at_bottom_right,#d9f2ff_0%,transparent_36%),linear-gradient(180deg,#f8fbff_0%,var(--background)_40%)] transition-colors duration-300 dark:bg-[radial-gradient(circle_at_top_left,#14365f_0%,transparent_42%),radial-gradient(circle_at_bottom_right,#12304f_0%,transparent_35%),linear-gradient(180deg,#0f1d32_0%,var(--background)_40%)]">
+    <AppBackground>
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <header className="card rounded-2xl bg-[linear-gradient(135deg,rgba(15,111,232,0.07),transparent_42%)] px-5 py-5 sm:px-7 dark:bg-[linear-gradient(135deg,rgba(85,191,255,0.12),transparent_42%)]">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--muted)]">
-                JO WORKING TIME
-              </p>
-              <h1 className="font-mono text-2xl font-semibold tracking-tight sm:text-3xl">
-                Theo dõi giờ công part-time và tính lương
-              </h1>
-              {employee ? (
-                <p className="mt-1 text-sm text-[color:var(--muted)]">
-                  Xin chào {employee.fullName} - Mã NV {employee.employeeCode}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-end">
-              <div className="soft-card inline-flex rounded-xl p-1">
-                <button
-                  className={`rounded-lg px-3 py-2 text-sm font-medium transition sm:px-4 ${
-                    theme === "light"
-                      ? "bg-[color:var(--accent)] text-white"
-                      : "text-[color:var(--muted)]"
-                  }`}
-                  onClick={() => setTheme("light")}
-                  type="button"
-                >
-                  Sáng
-                </button>
-                <button
-                  className={`rounded-lg px-3 py-2 text-sm font-medium transition sm:px-4 ${
-                    theme === "dark"
-                      ? "bg-[color:var(--accent)] text-white"
-                      : "text-[color:var(--muted)]"
-                  }`}
-                  onClick={() => setTheme("dark")}
-                  type="button"
-                >
-                  Tối
-                </button>
-              </div>
-
-              {employee ? (
-                <span className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-3 py-2 text-xs font-semibold text-[color:var(--foreground)]">
-                  Đang đăng nhập
-                </span>
-              ) : null}
-            </div>
-          </div>
-        </header>
+        <AppHeader
+          employee={employee ? { fullName: employee.fullName, employeeCode: employee.employeeCode } : null}
+          onTheme={setTheme}
+          theme={theme}
+        />
 
         <section className="grid gap-5 lg:grid-cols-[1.2fr_1fr]">
           {employee ? (
-            <div className="card rounded-2xl p-5 sm:p-6">
-              <h2 className="font-mono text-xl font-semibold">Thẻ nhân viên</h2>
-
-              <div className="mt-4 flex flex-col items-start gap-3 rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] p-3 sm:flex-row sm:items-center sm:gap-4">
-                {getAvatarUrl(employee.avatarPath) ? (
-                  <Image
-                    alt="Ảnh đại diện"
-                    className="h-16 w-16 rounded-full border border-[color:var(--line)] object-cover"
-                    src={getAvatarUrl(employee.avatarPath) ?? ""}
-                    width={64}
-                    height={64}
-                  />
-                ) : (
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] text-lg font-semibold">
-                    {employee.fullName.slice(0, 1).toUpperCase()}
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-semibold">{employee.fullName}</p>
-                  <p className="text-xs text-[color:var(--muted)]">Mã NV {employee.employeeCode}</p>
-                  <p className="mt-1 text-xs text-[color:var(--muted)]">
-                    Đơn giá: {moneyLabel(employee.hourlyRate)}/giờ
-                  </p>
-                </div>
-                <div className="flex w-full flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end">
-                  <button
-                    className={`${primaryButtonClass} w-full sm:w-auto`}
-                    disabled={avatarUploading}
-                    onClick={() => avatarInputRef.current?.click()}
-                    type="button"
-                  >
-                    {avatarUploading ? "Đang tải ảnh..." : "Cập nhật ảnh đại diện"}
-                  </button>
-                  <input
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) {
-                        void handleAvatarUpload(file);
-                      }
-                    }}
-                    ref={avatarInputRef}
-                    type="file"
-                  />
-                  {avatarMessage ? <p className="text-xs text-[color:var(--muted)]">{avatarMessage}</p> : null}
-                </div>
-              </div>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="soft-card rounded-xl p-3">
-                  <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">
-                    Trạng thái hôm nay
-                  </p>
-                  <p className="mt-1 text-base font-semibold">
-                    {todayShiftStatus}
-                  </p>
-                </div>
-                <div className="soft-card rounded-xl p-3">
-                  <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">
-                    Ảnh bằng chứng hôm nay
-                  </p>
-                  <p className="mt-1 text-base font-semibold">
-                    {todayEvidenceStatus}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <p className="text-sm font-semibold">Hành động nhanh</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    className={`${primaryButtonClass} w-full sm:w-auto`}
-                    onClick={scrollToTimesheet}
-                    type="button"
-                  >
-                    Chấm công hôm nay
-                  </button>
-                  <button
-                    className={`${secondaryButtonClass} w-full sm:w-auto`}
-                    onClick={scrollToSummary}
-                    type="button"
-                  >
-                    Xem tổng hợp
-                  </button>
-                  <button
-                    className={`${secondaryButtonClass} w-full sm:w-auto`}
-                    onClick={handleLogout}
-                    type="button"
-                  >
-                    Đăng xuất
-                  </button>
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <p className="text-sm font-semibold">Nhắc việc / cảnh báo</p>
-                <ul className="mt-2 space-y-2 text-sm text-[color:var(--muted)]">
-                  {reminders.map((item) => (
-                    <li
-                      className={`rounded-xl px-3 py-2 ${
-                        item.tone === "ok"
-                          ? "border border-[color:var(--line)] bg-[color:var(--surface-soft)] text-[color:var(--foreground)]"
-                          : "soft-card"
-                      }`}
-                      key={item.text}
-                    >
-                      {item.text}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          ) : (
-            <form className="card rounded-2xl p-5 sm:p-6" onSubmit={handleAuth}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="font-mono text-xl font-semibold">Xác thực nhân viên</h2>
-                <div className="soft-card inline-flex rounded-lg p-1">
-                  <button
-                    className={`rounded-md px-3 py-1 text-xs ${
-                      activeAuthMode === "login"
-                        ? "bg-[color:var(--accent)] text-white"
-                        : "text-[color:var(--muted)]"
-                    }`}
-                    onClick={() => setActiveAuthMode("login")}
-                    type="button"
-                  >
-                    Đăng nhập
-                  </button>
-                  <button
-                    className={`rounded-md px-3 py-1 text-xs ${
-                      activeAuthMode === "register"
-                        ? "bg-[color:var(--accent)] text-white"
-                        : "text-[color:var(--muted)]"
-                    }`}
-                    onClick={() => setActiveAuthMode("register")}
-                    type="button"
-                  >
-                    Đăng ký
-                  </button>
-                </div>
-              </div>
-
-              {activeAuthMode === "register" ? (
-                <label className="mt-4 block text-sm">
-                  Họ tên
-                  <input
-                    className={inputClass}
-                    onChange={(event) => setFullName(event.target.value)}
-                    placeholder="Nguyễn Văn A"
-                    value={fullName}
-                  />
-                </label>
-              ) : null}
-
-              <label className="mt-4 block text-sm">
-                Mã nhân viên (3-4 số)
-                <input
-                  className={inputClass}
-                  onChange={(event) => setEmployeeCode(event.target.value)}
-                  value={employeeCode}
-                />
-              </label>
-
-              <label className="mt-3 block text-sm">
-                Mật khẩu
-                <input
-                  className={inputClass}
-                  onChange={(event) => setPassword(event.target.value)}
-                  type="password"
-                  value={password}
-                />
-              </label>
-
-              {authMessage ? (
-                <p className="mt-3 text-sm text-[color:var(--muted)]">{authMessage}</p>
-              ) : null}
-
-              <button
-                className={`mt-4 w-full sm:w-auto ${primaryButtonClass}`}
-                disabled={authLoading}
-                type="submit"
-              >
-                {authLoading
-                  ? "Đang xử lý..."
-                  : activeAuthMode === "login"
-                    ? "Đăng nhập"
-                    : "Đăng ký"}
-              </button>
-            </form>
-          )}
+            <EmployeeCard
+              avatarMessage={avatarMessage}
+              avatarUploading={avatarUploading}
+              avatarUrl={getAvatarUrl(employee.avatarPath)}
+              employee={employee}
+              onAvatarFileChange={(file) => {
+                void handleAvatarUpload(file);
+              }}
+              onLogout={handleLogout}
+              onScrollToSummary={scrollToSummary}
+              onScrollToTimesheet={scrollToTimesheet}
+              primaryButtonClass={primaryButtonClass}
+              reminders={reminders}
+              secondaryButtonClass={secondaryButtonClass}
+              todayEvidenceStatus={todayEvidenceStatus}
+              todayShiftStatus={todayShiftStatus}
+            />
+          ) : null}
 
           <div className="card rounded-2xl p-5 sm:p-6">
             <h2 className="font-mono text-xl font-semibold">Tóm tắt ngày</h2>
@@ -1343,486 +807,85 @@ export default function Home() {
                 <p className="mt-1 font-mono text-2xl font-semibold tracking-tight">{moneyLabel(liveMetrics.salary)}</p>
               </div>
             </div>
-            <p className="mt-3 text-sm text-[color:var(--muted)]">
-              Đơn giá hiện tại: {moneyLabel(employee?.hourlyRate ?? DEFAULT_RATE)}/giờ
-            </p>
+            <p className="mt-3 text-sm text-[color:var(--muted)]">Đơn giá hiện tại: {moneyLabel(employee?.hourlyRate ?? DEFAULT_RATE)}/giờ</p>
           </div>
         </section>
 
-        <section className="card rounded-2xl p-5 sm:p-6" ref={timesheetSectionRef}>
-          <h2 className="font-mono text-xl font-semibold">Nhập giờ công mỗi ngày</h2>
-          <form className="mt-4 grid gap-4" onSubmit={handleSaveShift}>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {useNativePickers ? (
-                <label className="text-sm">
-                  Ngày
-                  <input
-                    className={inputClass}
-                    onChange={(event) => setWorkDate(event.target.value)}
-                    type="date"
-                    value={workDate}
-                  />
-                </label>
-              ) : (
-                <DatePickerField label="Ngày" onChange={setWorkDate} value={workDate} />
-              )}
-              <label className="text-sm">
-                Ca làm
-                <select
-                  className={inputClass}
-                  onChange={(event) => setShiftIndex(Number(event.target.value) as 1 | 2)}
-                  value={shiftIndex}
-                >
-                  <option value={1}>Ca 1</option>
-                  <option value={2}>Ca 2</option>
-                </select>
-              </label>
-            </div>
-
-            <div className="grid gap-3 lg:grid-cols-2">
-              <div className="soft-card rounded-xl p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">Khung giờ làm</p>
-                <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-                  {useNativePickers ? (
-                    <label className="text-sm">
-                      Giờ vào
-                      <input
-                        className={inputClass}
-                        onChange={(event) => setTimeIn(event.target.value)}
-                        type="time"
-                        value={timeIn}
-                      />
-                    </label>
-                  ) : (
-                    <TimePickerField label="Giờ vào" onChange={setTimeIn} value={timeIn} />
-                  )}
-                  <span className="pb-2 text-[color:var(--muted)]">→</span>
-                  {useNativePickers ? (
-                    <label className="text-sm">
-                      Giờ ra
-                      <input
-                        className={inputClass}
-                        onChange={(event) => setTimeOut(event.target.value)}
-                        type="time"
-                        value={timeOut}
-                      />
-                    </label>
-                  ) : (
-                    <TimePickerField label="Giờ ra" onChange={setTimeOut} value={timeOut} />
-                  )}
-                </div>
-              </div>
-
-              <div className="soft-card rounded-xl p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">Khoảng nghỉ</p>
-                <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-                  {useNativePickers ? (
-                    <label className="text-sm">
-                      Bắt đầu
-                      <input
-                        className={inputClass}
-                        onChange={(event) => setBreakIn(event.target.value)}
-                        type="time"
-                        value={breakIn}
-                      />
-                    </label>
-                  ) : (
-                    <TimePickerField label="Bắt đầu" onChange={setBreakIn} value={breakIn} />
-                  )}
-                  <span className="pb-2 text-[color:var(--muted)]">→</span>
-                  {useNativePickers ? (
-                    <label className="text-sm">
-                      Kết thúc
-                      <input
-                        className={inputClass}
-                        onChange={(event) => setBreakOut(event.target.value)}
-                        type="time"
-                        value={breakOut}
-                      />
-                    </label>
-                  ) : (
-                    <TimePickerField label="Kết thúc" onChange={setBreakOut} value={breakOut} />
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <label className="text-sm">
-              Ảnh bằng chứng
-              <input
-                accept="image/*"
-                className="mt-1 w-full rounded-xl border border-dashed border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2 text-sm shadow-sm transition focus:border-[color:var(--accent)] focus:outline-none"
-                onChange={(event) => setEvidenceFile(event.target.files?.[0] ?? null)}
-                type="file"
-              />
-            </label>
-
-            <div>
-              {entryMessage ? (
-                <p className="text-sm text-[color:var(--muted)]">{entryMessage}</p>
-              ) : (
-                <p className="text-sm text-[color:var(--muted)]">
-                  Nghỉ: {liveMetrics.breakMinutes} phút | Giờ công: {hoursLabel(liveMetrics.workMinutes)} h
-                </p>
-              )}
-              <button
-                className="mt-3 rounded-xl bg-[color:var(--accent-2)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:brightness-105 disabled:opacity-50 disabled:hover:translate-y-0"
-                disabled={!employee || saveLoading}
-                type="submit"
-              >
-                {saveLoading ? "Đang lưu..." : "Lưu giờ công"}
-              </button>
-              {!employee ? (
-                <p className="mt-2 text-xs text-[color:var(--warn)]">Cần đăng nhập trước khi lưu.</p>
-              ) : null}
-            </div>
-          </form>
-        </section>
+        <div ref={timesheetSectionRef}>
+          <TimesheetForm
+            canSave={Boolean(employee)}
+            breakIn={breakIn}
+            breakOut={breakOut}
+            entryMessage={entryMessage}
+            evidenceFileName={evidenceFile?.name ?? ""}
+            inputClass={inputClass}
+            liveBreakMinutes={liveMetrics.breakMinutes}
+            liveWorkHours={hoursLabel(liveMetrics.workMinutes)}
+            onChangeBreakIn={setBreakIn}
+            onChangeBreakOut={setBreakOut}
+            onChangeEvidence={setEvidenceFile}
+            onChangeShiftIndex={setShiftIndex}
+            onChangeTimeIn={setTimeIn}
+            onChangeTimeOut={setTimeOut}
+            onChangeWorkDate={setWorkDate}
+            onSubmit={handleSaveShift}
+            saveLoading={saveLoading}
+            shiftIndex={shiftIndex}
+            timeIn={timeIn}
+            timeOut={timeOut}
+            useNativePickers={useNativePickers}
+            workDate={workDate}
+          />
+        </div>
 
         <section className="grid gap-5 lg:grid-cols-2" ref={summarySectionRef}>
-          <div className="card rounded-2xl p-5 sm:p-6">
-            <h2 className="font-mono text-xl font-semibold">Tổng hợp theo khoảng ngày</h2>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                className={`${secondaryButtonClass} flex-1 min-w-[92px] sm:flex-none`}
-                onClick={() => applyQuickRange("today")}
-                type="button"
-              >
-                Hôm nay
-              </button>
-              <button
-                className={`${secondaryButtonClass} flex-1 min-w-[92px] sm:flex-none`}
-                onClick={() => applyQuickRange("week")}
-                type="button"
-              >
-                Tuần này
-              </button>
-              <button
-                className={`${secondaryButtonClass} flex-1 min-w-[92px] sm:flex-none`}
-                onClick={() => applyQuickRange("month")}
-                type="button"
-              >
-                Tháng này
-              </button>
-            </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {useNativePickers ? (
-                <label className="text-sm">
-                  Từ ngày
-                  <input
-                    className={inputClass}
-                    onChange={(event) => setRangeFrom(event.target.value)}
-                    type="date"
-                    value={rangeFrom}
-                  />
-                </label>
-              ) : (
-                <DatePickerField label="Từ ngày" onChange={setRangeFrom} value={rangeFrom} />
-              )}
+          <SummaryPanel
+            inputClass={inputClass}
+            isRangeValid={isRangeValid}
+            onQuickRange={applyQuickRange}
+            onRangeFrom={setRangeFrom}
+            onRangeTo={setRangeTo}
+            rangeFrom={rangeFrom}
+            rangeTo={rangeTo}
+            secondaryButtonClass={secondaryButtonClass}
+            summary={summary}
+            summaryLoading={summaryLoading}
+            useNativePickers={useNativePickers}
+          />
 
-              {useNativePickers ? (
-                <label className="text-sm">
-                  Đến ngày
-                  <input
-                    className={inputClass}
-                    onChange={(event) => setRangeTo(event.target.value)}
-                    type="date"
-                    value={rangeTo}
-                  />
-                </label>
-              ) : (
-                <DatePickerField label="Đến ngày" onChange={setRangeTo} value={rangeTo} />
-              )}
-            </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="soft-card rounded-xl p-3">
-                <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">
-                  Tổng giờ công
-                </p>
-                <p className="mt-1 font-mono text-xl font-semibold">
-                  {summaryLoading ? "..." : summary && isRangeValid ? `${hoursLabel(summary.total.workMinutes)} h` : "0.00 h"}
-                </p>
-              </div>
-              <div className="soft-card rounded-xl p-3">
-                <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">
-                  Tổng lương
-                </p>
-                <p className="mt-1 font-mono text-xl font-semibold">
-                  {summaryLoading ? "..." : summary && isRangeValid ? moneyLabel(summary.total.salaryAmount) : moneyLabel(0)}
-                </p>
-              </div>
-            </div>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <div className="soft-card rounded-xl p-3">
-                <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">So với kỳ trước (giờ)</p>
-                <p className="mt-1 font-mono text-xl font-semibold">
-                  {summaryLoading || !summary ? "..." : `${summary.change.workMinutesPct >= 0 ? "+" : ""}${summary.change.workMinutesPct}%`}
-                </p>
-              </div>
-              <div className="soft-card rounded-xl p-3">
-                <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--muted)]">So với kỳ trước (lương)</p>
-                <p className="mt-1 font-mono text-xl font-semibold">
-                  {summaryLoading || !summary ? "..." : `${summary.change.salaryAmountPct >= 0 ? "+" : ""}${summary.change.salaryAmountPct}%`}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="card rounded-2xl p-5 sm:p-6">
-            <h2 className="font-mono text-xl font-semibold">Bảng điều khiển</h2>
-            <p className="mt-1 text-sm text-[color:var(--muted)]">
-              So sánh tổng giờ công và lương theo tuần/tháng.
-            </p>
-            {summary && !(weeklyConsistencyOk && monthlyConsistencyOk) ? (
-              <p className="mt-2 text-xs text-[color:var(--warn)]">
-                Dữ liệu tuần/tháng chưa đồng bộ hoàn toàn giữa frontend và backend.
-              </p>
-            ) : null}
-
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div>
-                <h3 className="text-sm font-semibold">Theo tuần</h3>
-                <ul className="mt-2 space-y-2 text-sm">
-                  {summaryLoading ? (
-                    <li className="space-y-2">
-                      <div className="h-12 animate-pulse rounded-xl bg-[color:var(--surface-soft)]" />
-                      <div className="h-12 animate-pulse rounded-xl bg-[color:var(--surface-soft)]" />
-                    </li>
-                  ) : !summary || !isRangeValid || summary.weekly.length === 0 ? (
-                    <li className="text-[color:var(--muted)]">Chưa có dữ liệu.</li>
-                  ) : (
-                    summary.weekly.map((item) => (
-                      <li className="soft-card rounded-xl p-2" key={item.key}>
-                        <p className="font-medium">{item.key}</p>
-                        <div className="mt-1 h-2 rounded-full bg-[color:var(--line)]">
-                          <div
-                            className="h-2 rounded-full bg-[color:var(--accent)]"
-                            style={{
-                              width: `${Math.max(
-                                8,
-                                Math.min(
-                                  100,
-                                  (item.workMinutes /
-                                    Math.max(...summary.weekly.map((value) => value.workMinutes), 1)) *
-                                    100,
-                                ),
-                              )}%`,
-                            }}
-                          />
-                        </div>
-                        <p className="mt-1 text-[color:var(--muted)]">
-                          {hoursLabel(item.workMinutes)} h | {moneyLabel(item.salaryAmount)}
-                        </p>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-semibold">Theo tháng</h3>
-                <ul className="mt-2 space-y-2 text-sm">
-                  {summaryLoading ? (
-                    <li className="space-y-2">
-                      <div className="h-12 animate-pulse rounded-xl bg-[color:var(--surface-soft)]" />
-                      <div className="h-12 animate-pulse rounded-xl bg-[color:var(--surface-soft)]" />
-                    </li>
-                  ) : !summary || !isRangeValid || summary.monthly.length === 0 ? (
-                    <li className="text-[color:var(--muted)]">Chưa có dữ liệu.</li>
-                  ) : (
-                    summary.monthly.map((item) => (
-                      <li className="soft-card rounded-xl p-2" key={item.key}>
-                        <p className="font-medium">{item.key}</p>
-                        <div className="mt-1 h-2 rounded-full bg-[color:var(--line)]">
-                          <div
-                            className="h-2 rounded-full bg-[color:var(--accent-2)]"
-                            style={{
-                              width: `${Math.max(
-                                8,
-                                Math.min(
-                                  100,
-                                  (item.workMinutes /
-                                    Math.max(...summary.monthly.map((value) => value.workMinutes), 1)) *
-                                    100,
-                                ),
-                              )}%`,
-                            }}
-                          />
-                        </div>
-                        <p className="mt-1 text-[color:var(--muted)]">
-                          {hoursLabel(item.workMinutes)} h | {moneyLabel(item.salaryAmount)}
-                        </p>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </div>
-            </div>
-          </div>
+          <LazyDashboardComparison
+            hasSummary={Boolean(summary)}
+            isRangeValid={isRangeValid}
+            monthly={summary?.monthly ?? []}
+            monthlyConsistencyOk={monthlyConsistencyOk}
+            summaryLoading={summaryLoading}
+            weekly={summary?.weekly ?? []}
+            weeklyConsistencyOk={weeklyConsistencyOk}
+          />
         </section>
 
-        <section className="card rounded-2xl p-5 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="font-mono text-xl font-semibold">Danh sách chấm công</h2>
-            <button className={secondaryButtonClass} onClick={exportShiftsToCsv} type="button">
-              Xuất CSV
-            </button>
-          </div>
-          {shiftsLoading ? (
-            <div className="mt-3 space-y-2">
-              <div className="h-10 animate-pulse rounded-xl bg-[color:var(--surface-soft)]" />
-              <div className="h-10 animate-pulse rounded-xl bg-[color:var(--surface-soft)]" />
-              <div className="h-10 animate-pulse rounded-xl bg-[color:var(--surface-soft)]" />
-            </div>
-          ) : shifts.length === 0 ? (
-            <p className="mt-3 text-sm text-[color:var(--muted)]">Chưa có ngày công nào được lưu.</p>
-          ) : (
-            <div className="mt-4 overflow-x-auto rounded-xl border border-[color:var(--line)]">
-              <table className="min-w-full text-left text-xs sm:text-sm">
-                <thead>
-                  <tr className="border-b border-[color:var(--line)] bg-[color:var(--surface-soft)] text-[color:var(--muted)]">
-                    <th className="whitespace-nowrap px-2 py-2">Ngày</th>
-                    <th className="whitespace-nowrap px-2 py-2">Ca</th>
-                    <th className="whitespace-nowrap px-2 py-2">Ca làm</th>
-                    <th className="whitespace-nowrap px-2 py-2">Nghỉ giữa ca</th>
-                    <th className="whitespace-nowrap px-2 py-2">Giờ công</th>
-                    <th className="whitespace-nowrap px-2 py-2">Lương</th>
-                    <th className="whitespace-nowrap px-2 py-2">Ảnh bằng chứng</th>
-                    <th className="whitespace-nowrap px-2 py-2">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedShifts.map((shift) => (
-                    <tr className="border-b border-[color:var(--line)] odd:bg-[color:var(--surface)] even:bg-[color:var(--surface-soft)]" key={shift.id}>
-                      <td className="px-2 py-2">{shift.workDate.slice(0, 10)}</td>
-                      <td className="px-2 py-2">Ca {shift.shiftIndex}</td>
-                      <td className="px-2 py-2">
-                        {toHHMM(shift.timeInMinutes)} - {toHHMM(shift.timeOutMinutes)}
-                      </td>
-                      <td className="px-2 py-2">
-                        {toHHMM(shift.breakInMinutes)} - {toHHMM(shift.breakOutMinutes)}
-                      </td>
-                      <td className="px-2 py-2">{hoursLabel(shift.workMinutes)} h</td>
-                      <td className="px-2 py-2">{moneyLabel(shift.salaryAmount)}</td>
-                      <td className="px-2 py-2">
-                        {shift.evidencePath && getEvidenceUrl(shift.evidencePath) ? (
-                          <button
-                            className="inline-block cursor-zoom-in"
-                            onClick={() =>
-                              openEvidencePreview(
-                                getEvidenceUrl(shift.evidencePath) ?? "",
-                                `Ảnh bằng chứng ${shift.workDate.slice(0, 10)} - Ca ${shift.shiftIndex}`,
-                              )
-                            }
-                            type="button"
-                          >
-                            <Image
-                              alt={`Ảnh bằng chứng ${shift.workDate.slice(0, 10)}`}
-                              className="h-14 w-20 rounded-lg border border-[color:var(--line)] object-cover"
-                              height={56}
-                              src={getEvidenceUrl(shift.evidencePath) ?? ""}
-                              width={80}
-                            />
-                          </button>
-                        ) : (
-                          "Không có"
-                        )}
-                      </td>
-                      <td className="px-2 py-2">
-                        <button
-                          className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1 text-xs text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
-                          disabled={deletingShiftId === shift.id}
-                          onClick={() => handleDeleteShift(shift.id)}
-                          type="button"
-                        >
-                          {deletingShiftId === shift.id ? "Đang xóa..." : "Xóa"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+        <LazyShiftsTable
+          currentPage={currentPage}
+          deletingShiftId={deletingShiftId}
+          getEvidenceUrl={getEvidenceUrl}
+          onChangePage={setCurrentPage}
+          onDeleteShift={handleDeleteShift}
+          onExportCsv={exportShiftsToCsv}
+          onOpenEvidence={openEvidencePreview}
+          secondaryButtonClass={secondaryButtonClass}
+          shifts={shifts}
+          shiftsLoading={shiftsLoading}
+        />
 
-          {!shiftsLoading && shifts.length > PAGE_SIZE ? (
-            <div className="mt-4 flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-[color:var(--muted)]">
-                Trang {safeCurrentPage}/{totalPages} - Hiển thị {paginatedShifts.length} trên tổng {shifts.length} ngày công
-              </p>
-              <div className="flex w-full items-center gap-2 sm:w-auto">
-                <button
-                  className={`${secondaryButtonClass} flex-1 sm:flex-none`}
-                  disabled={safeCurrentPage === 1}
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                  type="button"
-                >
-                  Trước
-                </button>
-                <button
-                  className={`${secondaryButtonClass} flex-1 sm:flex-none`}
-                  disabled={safeCurrentPage === totalPages}
-                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                  type="button"
-                >
-                  Sau
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </section>
-
-        {previewImageUrl ? (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-            onClick={closeEvidencePreview}
-            role="presentation"
-          >
-            <div
-              className="relative w-full max-w-4xl rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-3 shadow-2xl"
-              onClick={(event) => event.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Xem ảnh bằng chứng"
-            >
-              <button
-                className="absolute right-3 top-3 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1 text-sm"
-                onClick={closeEvidencePreview}
-                type="button"
-              >
-                Đóng
-              </button>
-              {previewImageItems.length > 1 ? (
-                <>
-                  <button
-                    className="absolute bottom-3 left-3 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2 text-sm sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2"
-                    onClick={goPrevPreviewImage}
-                    type="button"
-                  >
-                    Trước
-                  </button>
-                  <button
-                    className="absolute bottom-3 right-3 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2 text-sm sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2"
-                    onClick={goNextPreviewImage}
-                    type="button"
-                  >
-                    Sau
-                  </button>
-                </>
-              ) : null}
-              <div className="mt-8 flex h-[68vh] min-h-[360px] w-full items-center justify-center overflow-hidden rounded-xl bg-[color:var(--surface-soft)]">
-                <Image
-                  alt={previewImageAlt}
-                  className="h-full w-full object-contain"
-                  height={900}
-                  src={previewImageUrl}
-                  width={1200}
-                />
-              </div>
-            </div>
-          </div>
-        ) : null}
+        <LazyEvidenceModal
+          hasMultiple={previewImageItems.length > 1}
+          imageAlt={previewImageAlt}
+          imageUrl={previewImageUrl}
+          onClose={closeEvidencePreview}
+          onNext={goNextPreviewImage}
+          onPrev={goPrevPreviewImage}
+          open={Boolean(previewImageUrl)}
+        />
 
         {toast ? (
           <div className="fixed inset-x-4 bottom-4 z-50 sm:inset-x-auto sm:right-5 sm:max-w-sm">
@@ -1840,6 +903,6 @@ export default function Home() {
           </div>
         ) : null}
       </main>
-    </div>
+    </AppBackground>
   );
 }

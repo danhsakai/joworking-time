@@ -68,6 +68,11 @@ Schema nam tai: `prisma/schema.prisma`
 - `POST /api/evidence/upload`
 - `POST /api/account/avatar`
 
+## 4.1) Auth pages
+
+- `/auth`: man hinh dang nhap/dang ky rieng
+- `/`: dashboard chi hien thi khi da dang nhap
+
 ## 6) Quy tac cham cong
 
 - 1 ngay toi da 2 ca (`shiftIndex`: 1 hoac 2)
