@@ -122,6 +122,303 @@ function getEvidenceUrl(evidencePath: string | null | undefined) {
   return getStoragePublicUrl("timesheet-evidence", evidencePath);
 }
 
+function parseHHMM(value: string) {
+  const [h, m] = value.split(":").map(Number);
+  return {
+    hour: Number.isFinite(h) ? h : 0,
+    minute: Number.isFinite(m) ? m : 0,
+  };
+}
+
+function pad2(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function parseDateInput(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
+function monthLabel(date: Date) {
+  return `Tháng ${date.getMonth() + 1}/${date.getFullYear()}`;
+}
+
+function calendarDays(viewMonth: Date) {
+  const firstDayOfMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
+  const startOffset = (firstDayOfMonth.getDay() + 6) % 7;
+  const startDate = new Date(firstDayOfMonth);
+  startDate.setDate(firstDayOfMonth.getDate() - startOffset);
+
+  return Array.from({ length: 42 }, (_, idx) => {
+    const day = new Date(startDate);
+    day.setDate(startDate.getDate() + idx);
+    return day;
+  });
+}
+
+function TimePickerField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const { hour, minute } = parseHHMM(value);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onOutsideClick = (event: MouseEvent) => {
+      if (!wrapperRef.current) return;
+      if (!wrapperRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+
+    window.addEventListener("mousedown", onOutsideClick);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", onOutsideClick);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+      <label className="text-sm">{label}</label>
+      <button
+        className="mt-1 flex w-full items-center justify-between rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2 text-sm shadow-sm transition hover:bg-[color:var(--surface-soft)]"
+        onClick={() => setOpen((prev) => !prev)}
+        type="button"
+      >
+        <span className="font-medium">{value}</span>
+        <span className="text-[color:var(--muted)]">🕒</span>
+      </button>
+
+      {open ? (
+        <div className="absolute left-0 z-30 mt-2 w-[272px] max-w-[calc(100vw-3rem)] rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-3 shadow-xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">
+            Chọn giờ
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-xs text-[color:var(--muted)]">Giờ</p>
+              <div className="mt-1 max-h-40 overflow-y-auto rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] p-1">
+                {Array.from({ length: 24 }, (_, idx) => idx).map((item) => {
+                  const selected = item === hour;
+                  return (
+                    <button
+                      className={`mb-1 w-full rounded-lg px-2 py-1.5 text-left text-sm last:mb-0 ${
+                        selected
+                          ? "bg-[color:var(--accent)] text-white"
+                          : "hover:bg-[color:var(--surface)]"
+                      }`}
+                      key={`hour-${item}`}
+                      onClick={() => onChange(`${pad2(item)}:${pad2(minute)}`)}
+                      type="button"
+                    >
+                      {pad2(item)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs text-[color:var(--muted)]">Phút</p>
+              <div className="mt-1 max-h-40 overflow-y-auto rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-soft)] p-1">
+                {Array.from({ length: 60 }, (_, idx) => idx).map((item) => {
+                  const selected = item === minute;
+                  return (
+                    <button
+                      className={`mb-1 w-full rounded-lg px-2 py-1.5 text-left text-sm last:mb-0 ${
+                        selected
+                          ? "bg-[color:var(--accent)] text-white"
+                          : "hover:bg-[color:var(--surface)]"
+                      }`}
+                      key={`minute-${item}`}
+                      onClick={() => onChange(`${pad2(hour)}:${pad2(item)}`)}
+                      type="button"
+                    >
+                      {pad2(item)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-2 flex justify-end">
+            <button
+              className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-3 py-1.5 text-xs"
+              onClick={() => setOpen(false)}
+              type="button"
+            >
+              Xong
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function DatePickerField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const selectedDate = parseDateInput(value) ?? new Date();
+  const [viewMonth, setViewMonth] = useState(
+    new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1),
+  );
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onOutsideClick = (event: MouseEvent) => {
+      if (!wrapperRef.current) return;
+      if (!wrapperRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+
+    window.addEventListener("mousedown", onOutsideClick);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", onOutsideClick);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  const days = calendarDays(viewMonth);
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+      <label className="text-sm">{label}</label>
+      <button
+        className="mt-1 flex w-full items-center justify-between rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2 text-sm shadow-sm transition hover:bg-[color:var(--surface-soft)]"
+        onClick={() => {
+          const parsed = parseDateInput(value);
+          if (parsed) {
+            setViewMonth(new Date(parsed.getFullYear(), parsed.getMonth(), 1));
+          }
+          setOpen((prev) => !prev);
+        }}
+        type="button"
+      >
+        <span className="font-medium">{value}</span>
+        <span className="text-[color:var(--muted)]">📅</span>
+      </button>
+
+      {open ? (
+        <div className="absolute left-0 z-30 mt-2 w-[300px] max-w-[calc(100vw-3rem)] rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-3 shadow-xl">
+          <div className="mb-2 flex items-center justify-between">
+            <button
+              className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-2 py-1 text-xs"
+              onClick={() =>
+                setViewMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+              }
+              type="button"
+            >
+              ←
+            </button>
+            <p className="text-sm font-semibold">{monthLabel(viewMonth)}</p>
+            <button
+              className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-2 py-1 text-xs"
+              onClick={() =>
+                setViewMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+              }
+              type="button"
+            >
+              →
+            </button>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 text-center text-xs text-[color:var(--muted)]">
+            <span>T2</span>
+            <span>T3</span>
+            <span>T4</span>
+            <span>T5</span>
+            <span>T6</span>
+            <span>T7</span>
+            <span>CN</span>
+          </div>
+
+          <div className="mt-1 grid grid-cols-7 gap-1">
+            {days.map((day) => {
+              const inMonth = day.getMonth() === viewMonth.getMonth();
+              const isSelected = toDateInput(day) === value;
+              return (
+                <button
+                  className={`rounded-lg px-1 py-1.5 text-sm ${
+                    isSelected
+                      ? "bg-[color:var(--accent)] text-white"
+                      : inMonth
+                        ? "hover:bg-[color:var(--surface-soft)]"
+                        : "text-[color:var(--muted)]/60 hover:bg-[color:var(--surface-soft)]"
+                  }`}
+                  key={`${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`}
+                  onClick={() => {
+                    onChange(toDateInput(day));
+                    setOpen(false);
+                  }}
+                  type="button"
+                >
+                  {day.getDate()}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-2 flex justify-between">
+            <button
+              className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-3 py-1.5 text-xs"
+              onClick={() => {
+                onChange(toDateInput(new Date()));
+                setOpen(false);
+              }}
+              type="button"
+            >
+              Hôm nay
+            </button>
+            <button
+              className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-soft)] px-3 py-1.5 text-xs"
+              onClick={() => setOpen(false)}
+              type="button"
+            >
+              Xong
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 const inputClass =
   "mt-1 w-full rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2 text-sm shadow-sm transition focus:border-[color:var(--accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]/20";
 
@@ -983,75 +1280,53 @@ export default function Home() {
 
         <section className="card rounded-2xl p-5 sm:p-6" ref={timesheetSectionRef}>
           <h2 className="font-mono text-xl font-semibold">Nhập giờ công mỗi ngày</h2>
-          <form className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" onSubmit={handleSaveShift}>
-            <label className="text-sm">
-              Ngày
-                <input
+          <form className="mt-4 grid gap-4" onSubmit={handleSaveShift}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <DatePickerField label="Ngày" onChange={setWorkDate} value={workDate} />
+              <label className="text-sm">
+                Ca làm
+                <select
                   className={inputClass}
-                  onChange={(event) => setWorkDate(event.target.value)}
-                  type="date"
-                value={workDate}
-              />
-            </label>
-            <label className="text-sm">
-              Ca làm
-              <select
-                className={inputClass}
-                onChange={(event) => setShiftIndex(Number(event.target.value) as 1 | 2)}
-                value={shiftIndex}
-              >
-                <option value={1}>Ca 1</option>
-                <option value={2}>Ca 2</option>
-              </select>
-            </label>
-            <label className="text-sm">
-              Giờ vào
-                <input
-                  className={inputClass}
-                  onChange={(event) => setTimeIn(event.target.value)}
-                  type="time"
-                  value={timeIn}
-              />
-            </label>
-            <label className="text-sm">
-              Giờ ra
-                <input
-                  className={inputClass}
-                  onChange={(event) => setTimeOut(event.target.value)}
-                  type="time"
-                  value={timeOut}
-              />
-            </label>
-            <label className="text-sm">
-              Bắt đầu nghỉ
-                <input
-                  className={inputClass}
-                  onChange={(event) => setBreakIn(event.target.value)}
-                  type="time"
-                  value={breakIn}
-              />
-            </label>
-            <label className="text-sm">
-              Kết thúc nghỉ
-                <input
-                  className={inputClass}
-                  onChange={(event) => setBreakOut(event.target.value)}
-                  type="time"
-                  value={breakOut}
-              />
-            </label>
+                  onChange={(event) => setShiftIndex(Number(event.target.value) as 1 | 2)}
+                  value={shiftIndex}
+                >
+                  <option value={1}>Ca 1</option>
+                  <option value={2}>Ca 2</option>
+                </select>
+              </label>
+            </div>
 
-            <label className="text-sm sm:col-span-2 lg:col-span-2">
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="soft-card rounded-xl p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">Khung giờ làm</p>
+                <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+                  <TimePickerField label="Giờ vào" onChange={setTimeIn} value={timeIn} />
+                  <span className="pb-2 text-[color:var(--muted)]">→</span>
+                  <TimePickerField label="Giờ ra" onChange={setTimeOut} value={timeOut} />
+                </div>
+              </div>
+
+              <div className="soft-card rounded-xl p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--muted)]">Khoảng nghỉ</p>
+                <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+                  <TimePickerField label="Bắt đầu" onChange={setBreakIn} value={breakIn} />
+                  <span className="pb-2 text-[color:var(--muted)]">→</span>
+                  <TimePickerField label="Kết thúc" onChange={setBreakOut} value={breakOut} />
+                </div>
+              </div>
+            </div>
+
+            <label className="text-sm">
               Ảnh bằng chứng
-                <input
-                  accept="image/*"
-                  className="mt-1 w-full rounded-xl border border-dashed border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2 text-sm shadow-sm transition focus:border-[color:var(--accent)] focus:outline-none"
-                  onChange={(event) => setEvidenceFile(event.target.files?.[0] ?? null)}
-                  type="file"
-                />
+              <input
+                accept="image/*"
+                className="mt-1 w-full rounded-xl border border-dashed border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2 text-sm shadow-sm transition focus:border-[color:var(--accent)] focus:outline-none"
+                onChange={(event) => setEvidenceFile(event.target.files?.[0] ?? null)}
+                type="file"
+              />
             </label>
 
-            <div className="sm:col-span-2 lg:col-span-4">
+            <div>
               {entryMessage ? (
                 <p className="text-sm text-[color:var(--muted)]">{entryMessage}</p>
               ) : (
@@ -1100,24 +1375,8 @@ export default function Home() {
               </button>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <label className="text-sm">
-                Từ ngày
-                <input
-                  className={inputClass}
-                  onChange={(event) => setRangeFrom(event.target.value)}
-                  type="date"
-                  value={rangeFrom}
-                />
-              </label>
-              <label className="text-sm">
-                Đến ngày
-                <input
-                  className={inputClass}
-                  onChange={(event) => setRangeTo(event.target.value)}
-                  type="date"
-                  value={rangeTo}
-                />
-              </label>
+              <DatePickerField label="Từ ngày" onChange={setRangeFrom} value={rangeFrom} />
+              <DatePickerField label="Đến ngày" onChange={setRangeTo} value={rangeTo} />
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
